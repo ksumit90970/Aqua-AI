@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+model/*.pkl
+database/*.db
+.streamlit/
