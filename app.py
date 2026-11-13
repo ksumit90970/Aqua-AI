@@ -32,29 +32,63 @@ def ensure_model():
       )
 
 
-# (Label, min, max, default, step, safe_min, safe_max)
+# (Label, min_input, max_input, default, step, ideal_val, healthy_min, healthy_max, unhealthy_desc)
 FEATURE_SPECS = {
-    "ph": ("pH Level", 0.0, 14.0, 7.2, 0.1, 6.5, 8.5),
-    "Hardness": ("Hardness (mg/L)", 0.0, 5000.0, 150.0, 1.0, 60.0, 200.0),
+    "ph": ("pH Level", 0.0, 14.0, 7.2, 0.1, 7.0, 6.5, 8.5, "< 6.5 or > 8.5"),
+    "Hardness": (
+        "Hardness (mg/L)",
+        0.0,
+        5000.0,
+        150.0,
+        1.0,
+        120.0,
+        60.0,
+        200.0,
+        "< 60 or > 200",
+    ),
     "Solids": (
         "Total Dissolved Solids (ppm)",
         0.0,
         100000.0,
         16000.0,
         100.0,
-        0.0,
+        15000.0,
+        5000.0,
         20000.0,
+        "> 20,000",
     ),
-    "Chloramines": ("Chloramines (ppm)", 0.0, 50.0, 6.8, 0.1, 0.0, 8.0),
-    "Sulfate": ("Sulfate (mg/L)", 0.0, 2000.0, 290.0, 1.0, 0.0, 350.0),
+    "Chloramines": (
+        "Chloramines (ppm)",
+        0.0,
+        50.0,
+        6.8,
+        0.1,
+        6.0,
+        4.0,
+        8.0,
+        "< 4.0 or > 8.0",
+    ),
+    "Sulfate": (
+        "Sulfate (mg/L)",
+        0.0,
+        2000.0,
+        290.0,
+        1.0,
+        250.0,
+        150.0,
+        350.0,
+        "> 350",
+    ),
     "Conductivity": (
         "Conductivity (μS/cm)",
         0.0,
         5000.0,
         380.0,
         1.0,
-        0.0,
+        350.0,
+        250.0,
         450.0,
+        "< 250 or > 450",
     ),
     "Organic_carbon": (
         "Organic Carbon (ppm)",
@@ -62,8 +96,10 @@ FEATURE_SPECS = {
         100.0,
         10.0,
         0.1,
-        0.0,
+        8.0,
+        2.0,
         12.0,
+        "> 12.0",
     ),
     "Trihalomethanes": (
         "Trihalomethanes (μg/L)",
@@ -71,22 +107,34 @@ FEATURE_SPECS = {
         500.0,
         55.0,
         0.1,
-        0.0,
+        50.0,
+        10.0,
         80.0,
+        "> 80.0",
     ),
-    "Turbidity": ("Turbidity (NTU)", 0.0, 100.0, 2.8, 0.1, 0.0, 4.0),
+    "Turbidity": (
+        "Turbidity (NTU)",
+        0.0,
+        100.0,
+        2.8,
+        0.1,
+        2.0,
+        0.5,
+        4.0,
+        "> 4.0",
+    ),
 }
 
 HEALTHY_PRESET = {
-    "ph": 7.2,
-    "Hardness": 150.0,
-    "Solids": 16000.0,
-    "Chloramines": 6.8,
-    "Sulfate": 290.0,
-    "Conductivity": 380.0,
-    "Organic_carbon": 10.0,
-    "Trihalomethanes": 55.0,
-    "Turbidity": 2.8,
+    "ph": 7.1,
+    "Hardness": 125.0,
+    "Solids": 15200.0,
+    "Chloramines": 6.2,
+    "Sulfate": 255.0,
+    "Conductivity": 355.0,
+    "Organic_carbon": 8.2,
+    "Trihalomethanes": 52.0,
+    "Turbidity": 2.1,
 }
 
 UNHEALTHY_PRESET = {
@@ -143,8 +191,8 @@ init_db()
 
 st.title("💧 Aqua-AI: Smart Water Quality Monitoring & Health Analysis")
 st.caption(
-    "AI-powered water testing diagnostics • Healthy vs. Unhealthy"
-    " classification & analytical reports"
+    "AI-powered water testing diagnostics • Ideal range benchmarks, deviation"
+    " tracking & health classification"
 )
 
 page = st.sidebar.radio(
@@ -213,7 +261,6 @@ if page == "Dashboard & Reports":
       )
       st.plotly_chart(fig_trend, use_container_width=True)
 
-    # Bar chart of average values: Healthy vs Unhealthy
     avg_df = (
         history_asc.groupby("Health Status")[
             ["ph", "Turbidity", "Chloramines", "Organic_carbon"]
@@ -245,7 +292,7 @@ if page == "Dashboard & Reports":
 
 # ==================== 2. TEST WATER QUALITY ====================
 elif page == "Test Water Quality":
-  st.subheader("Test Water Sample Health")
+  st.subheader("Test Water Sample & Ideal Deviation Analysis")
   if not MODEL_PATH.exists():
     st.error("Trained model not found. Run train_model.py first.")
     st.stop()
@@ -253,6 +300,24 @@ elif page == "Test Water Quality":
   bundle = joblib.load(MODEL_PATH)
   model = bundle["model"]
   features = bundle["features"]
+
+  # Reference guide expander so users can view Healthy vs Unhealthy ranges anytime
+  with st.expander(
+      "View Ideal Values, Healthy Ranges & Unhealthy Thresholds Reference",
+      expanded=False,
+  ):
+    ref_rows = []
+    for feat in features:
+      label, _, _, _, _, ideal_v, h_min, h_max, unh_desc = FEATURE_SPECS[feat]
+      ref_rows.append({
+          "Parameter": label,
+          "Ideal Target": ideal_v,
+          "Healthy Range": f"{h_min} – {h_max}",
+          "Unhealthy Range": unh_desc,
+      })
+    st.dataframe(
+        pd.DataFrame(ref_rows), use_container_width=True, hide_index=True
+    )
 
   # Quick Demo Buttons
   b1, b2, _ = st.columns([1, 1, 2])
@@ -266,25 +331,26 @@ elif page == "Test Water Quality":
   values = {}
   cols = st.columns(3)
   for i, feature in enumerate(features):
-    label, minimum, maximum, default, step, _, _ = FEATURE_SPECS.get(
-        feature, (feature, 0.0, 100000.0, 1.0, 0.1, 0.0, 100.0)
+    label, minimum, maximum, default, step, ideal_v, h_min, h_max, _ = (
+        FEATURE_SPECS.get(
+            feature, (feature, 0.0, 100000.0, 1.0, 0.1, 1.0, 0.0, 100.0, "> 100")
+        )
     )
     if f"input_{feature}" not in st.session_state:
       st.session_state[f"input_{feature}"] = float(default)
     with cols[i % 3]:
       values[feature] = st.number_input(
-          label,
+          f"{label}  (Ideal: {ideal_v} | Healthy: {h_min}–{h_max})",
           min_value=float(minimum),
           max_value=float(maximum),
           step=float(step),
           key=f"input_{feature}",
       )
 
-  if st.button("Analyze Water Health", type="primary"):
+  if st.button("Analyze Water Health & Deviations", type="primary"):
     sample = pd.DataFrame([[values[f] for f in features]], columns=features)
     prediction = int(model.predict(sample)[0])
 
-    # Get model probability confidence if supported
     confidence_text = ""
     if hasattr(model, "predict_proba"):
       probs = model.predict_proba(sample)[0]
@@ -297,64 +363,90 @@ elif page == "Test Water Quality":
     if prediction == 1:
       st.success(
           f"### 🟢 WATER IS HEALTHY (Potable){confidence_text}\n"
-          "This water sample meets safe drinking water patterns and is"
+          "This water sample aligns with safe drinking water benchmarks and is"
           " suitable for consumption."
       )
     else:
       st.error(
           f"### 🔴 WATER IS UNHEALTHY (Non-Potable / Contaminated){confidence_text}\n"
-          "Warning: One or more chemical/physical parameters indicate"
-          " contamination. Do NOT drink without filtration or treatment."
+          "Warning: Significant deviations from ideal water standards detected."
+          " Do NOT drink without treatment."
       )
 
-    # Parameter-by-Parameter Diagnostic Table & Visual Report
+    # Build Detailed Deviation & Range Table
     report_rows = []
-    chart_labels, pct_of_limit, bar_colors = [], [], []
+    chart_labels, pct_deviations, bar_colors = [], [], []
+    healthy_param_count = 0
+
     for feat in features:
-      label, _, _, _, _, safe_min, safe_max = FEATURE_SPECS[feat]
+      label, _, _, _, _, ideal_v, h_min, h_max, unh_desc = FEATURE_SPECS[feat]
       val = values[feat]
-      in_range = safe_min <= val <= safe_max
+
+      # Numeric and percentage deviation from ideal value
+      diff = val - ideal_v
+      pct_dev = ((val - ideal_v) / ideal_v * 100) if ideal_v != 0 else 0.0
+
+      in_healthy_range = h_min <= val <= h_max
+      if in_healthy_range:
+        healthy_param_count += 1
+        if abs(pct_dev) <= 10.0:
+          status_tag = "🟢 Optimal (Near Ideal)"
+          color = "#16a34a"
+        else:
+          status_tag = "🟡 Healthy (Within Range)"
+          color = "#eab308"
+      else:
+        status_tag = "🔴 Unhealthy (Out of Range)"
+        color = "#dc2626"
+
       report_rows.append({
           "Parameter": label,
-          "Measured Value": val,
-          "Safe Range": f"{safe_min} – {safe_max}",
-          "Condition": "Healthy" if in_range else "Out of Range",
+          "Measured": round(val, 2),
+          "Ideal Value": ideal_v,
+          "Deviation from Ideal": f"{diff:+.2f} ({pct_dev:+.1f}%)",
+          "Healthy Range": f"{h_min} – {h_max}",
+          "Unhealthy Range": unh_desc,
+          "Status": status_tag,
       })
+
       chart_labels.append(feat)
-      pct_of_limit.append(round((val / safe_max) * 100, 1) if safe_max > 0 else 0)
-      bar_colors.append("#16a34a" if in_range else "#dc2626")
+      pct_deviations.append(round(pct_dev, 1))
+      bar_colors.append(color)
 
-    c_table, c_chart = st.columns([1.1, 1.2])
-    with c_table:
-      st.markdown("**Parameter Diagnostic Breakdown**")
-      st.dataframe(
-          pd.DataFrame(report_rows), use_container_width=True, hide_index=True
-      )
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Parameters in Healthy Range", f"{healthy_param_count} / {len(features)}")
+    m2.metric("Parameters Out of Range", f"{len(features) - healthy_param_count} / {len(features)}")
+    avg_abs_dev = sum(abs(d) for d in pct_deviations) / len(pct_deviations)
+    m3.metric("Mean Deviation from Ideal", f"{avg_abs_dev:.1f}%")
 
-    with c_chart:
-      st.markdown("**Sample Level vs. Maximum Safe Threshold (%)**")
-      fig_diag = go.Figure(
-          go.Bar(
-              x=pct_of_limit,
-              y=chart_labels,
-              orientation="h",
-              marker_color=bar_colors,
-              text=[f"{p}%" for p in pct_of_limit],
-              textposition="auto",
-          )
-      )
-      fig_diag.add_vline(
-          x=100,
-          line_dash="dash",
-          line_color="orange",
-          annotation_text="Safe Limit (100%)",
-      )
-      fig_diag.update_layout(
-          xaxis_title="% of Safe Upper Limit (100% = Max Safe)",
-          height=380,
-          margin=dict(l=10, r=10, t=20, b=20),
-      )
-      st.plotly_chart(fig_diag, use_container_width=True)
+    st.markdown("### Parameter Benchmark & Deviation Report")
+    st.dataframe(
+        pd.DataFrame(report_rows), use_container_width=True, hide_index=True
+    )
+
+    st.markdown("### Percentage Deviation from Ideal Target (`0%` = Exact Ideal)")
+    fig_dev = go.Figure(
+        go.Bar(
+            x=pct_deviations,
+            y=chart_labels,
+            orientation="h",
+            marker_color=bar_colors,
+            text=[f"{p:+.1f}%" for p in pct_deviations],
+            textposition="auto",
+        )
+    )
+    fig_dev.add_vline(
+        x=0,
+        line_dash="solid",
+        line_color="#38bdf8",
+        annotation_text="Ideal Target (0%)",
+    )
+    fig_dev.update_layout(
+        xaxis_title="% Deviation from Ideal Value (- Below Ideal | + Above Ideal)",
+        height=420,
+        margin=dict(l=10, r=10, t=30, b=20),
+    )
+    st.plotly_chart(fig_dev, use_container_width=True)
 
 # ==================== 3. HISTORY ====================
 elif page == "History":
@@ -371,7 +463,7 @@ elif page == "History":
     st.download_button(
         "Download Full Report as CSV",
         data=display.to_csv(index=False).encode("utf-8"),
-        file_name="water_health_report.csv",
+        file_name="water_health_deviation_report.csv",
         mime="text/csv",
     )
 
@@ -380,8 +472,8 @@ elif page == "About":
   st.subheader("About Aqua-AI")
   st.markdown("""
     **Aqua-AI** evaluates 9 physicochemical water quality parameters using a Random Forest classifier
-    to determine whether water is **Healthy (Potable)** or **Unhealthy (Non-potable)** and generates
-    visual threshold reports for each sample.
+    to determine whether water is **Healthy (Potable)** or **Unhealthy (Non-potable)**, while benchmarking
+    each reading against ideal target values and safe/unhealthy ranges.
     """)
   st.warning(
       "Disclaimer: This software prototype provides ML-based screening and does"
