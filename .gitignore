@@ -4,3 +4,9 @@ __pycache__/
 model/*.pkl
 database/*.db
 .streamlit/
+venv/
+.venv/
+__pycache__/
+*.pyc
+.streamlit/secrets.toml
+*.db
